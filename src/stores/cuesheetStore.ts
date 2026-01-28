@@ -83,6 +83,35 @@ export const useCuesheetStore = create<CuesheetState>()(
         selectItem: (id) =>
           set((state) => {
             state.selectedItemId = id;
+
+            // Send cue_item_selected event via WebSocket (Main → Sub)
+            const selectedItem = state.items.find((item) => item.cueItemId === id);
+            if (selectedItem) {
+              // Import at runtime to avoid circular dependencies
+              import('@/lib/websocket/mainClient').then(({ getMainClient }) => {
+                const mainClient = getMainClient();
+
+                // TODO: Fetch full hand data from API
+                // For now, send minimal data structure with required fields
+                mainClient.send({
+                  type: 'cue_item_selected',
+                  payload: {
+                    cueItemId: selectedItem.cueItemId,
+                    handId: selectedItem.handId,
+                    compositionName: selectedItem.compositionName,
+                    handData: {
+                      handNum: selectedItem.handNum,
+                      sessionId: '', // TODO: Get from session context
+                      players: [],   // TODO: Fetch from hand data
+                      boardCards: [],
+                      pot: 0,
+                      blindLevel: ''
+                    }
+                  },
+                  timestamp: new Date().toISOString()
+                });
+              });
+            }
           }, false, 'selectItem'),
 
         saveToDb: async () => {

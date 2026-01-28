@@ -10,13 +10,16 @@
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "moduleDetection": "force",
-    "noEmit": true,
 
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* Project references */
+    "composite": true,
+    "emitDeclarationOnly": true
   },
   "include": ["vite.config.ts", "playwright.config.ts"]
 }

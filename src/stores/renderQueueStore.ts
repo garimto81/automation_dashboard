@@ -12,10 +12,45 @@ import type { RenderQueueState, RenderJob, RenderJobStatus } from '@/types';
 
 const MAX_CONCURRENT = 2; // Default max concurrent renders
 
+// Subscribe to WebSocket events for render status updates
+function subscribeToWebSocket(store: any) {
+  // Dynamic import to avoid circular dependencies
+  import('./websocketStore').then(({ useWebSocketStore }) => {
+    const wsStore = useWebSocketStore.getState();
+
+    // Listen for render-related messages
+    useWebSocketStore.subscribe((state) => {
+      if (state.lastMessage) {
+        const message = state.lastMessage;
+
+        switch (message.type) {
+          case 'render_request':
+            // Add job to queue when render request received
+            store.getState().addJob({
+              cueItemId: message.payload.requestId,
+              compositionName: message.payload.compositionName,
+              handId: message.payload.handId,
+              priority: message.payload.priority,
+              gfxData: message.payload.gfxData
+            });
+            break;
+
+          default:
+            break;
+        }
+      }
+    });
+  });
+}
+
 export const useRenderQueueStore = create<RenderQueueState>()(
   devtools(
     persist(
-      immer((set, get) => ({
+      immer((set, get) => {
+        // Subscribe to WebSocket after store creation
+        setTimeout(() => subscribeToWebSocket({ getState: get }), 0);
+
+        return {
         // State
         jobs: [],
         activeJobIds: [],
@@ -61,6 +96,44 @@ export const useRenderQueueStore = create<RenderQueueState>()(
                   job.duration = (job.completedAt.getTime() - job.startedAt.getTime()) / 1000;
                 }
               }
+
+              // Send status update via WebSocket
+              import('./websocketStore').then(({ useWebSocketStore }) => {
+                const wsStore = useWebSocketStore.getState();
+
+                wsStore.sendToMain({
+                  type: 'render_status_update',
+                  payload: {
+                    jobId,
+                    status,
+                    progress: progress ?? job.progress
+                  },
+                  timestamp: new Date().toISOString()
+                });
+
+                // Send completion/error messages
+                if (status === 'completed' && job.output) {
+                  wsStore.sendToMain({
+                    type: 'render_complete',
+                    payload: {
+                      jobId,
+                      output: job.output
+                    },
+                    timestamp: new Date().toISOString()
+                  });
+                } else if (status === 'failed' && job.error) {
+                  wsStore.sendToMain({
+                    type: 'render_error',
+                    payload: {
+                      jobId,
+                      errorCode: job.error.code,
+                      errorMessage: job.error.message,
+                      retryable: job.error.retryable
+                    },
+                    timestamp: new Date().toISOString()
+                  });
+                }
+              });
             }
           }, false, 'updateJobStatus'),
 
@@ -143,7 +216,8 @@ export const useRenderQueueStore = create<RenderQueueState>()(
 
         getFailedJobs: () =>
           get().jobs.filter((job) => job.status === 'failed')
-      })),
+        };
+      }),
       {
         name: 'render-queue-storage',
         partialize: (state) => ({

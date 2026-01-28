@@ -5,6 +5,9 @@ import path from 'path';
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  define: {
+    'import.meta.env': JSON.stringify(process.env),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
